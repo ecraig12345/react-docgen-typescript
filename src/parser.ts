@@ -3,7 +3,6 @@ import * as path from 'path';
 import * as ts from 'typescript';
 
 import { buildFilter } from './buildFilter';
-import { SymbolDisplayPart } from 'typescript';
 
 // We'll use the currentDirectoryName to trim parent fileNames
 const currentDirectoryPath = process.cwd();
@@ -484,9 +483,7 @@ export class Parser {
       const returnType = this.checker.typeToString(
         callSignature.getReturnType()
       );
-      const returnDescription = ts.displayPartsToString(
-        this.getReturnDescription(member)
-      );
+      const returnDescription = this.getReturnDescription(member);
       const modifiers = this.getModifiers(member);
 
       methods.push({
@@ -563,16 +560,10 @@ export class Parser {
     return Boolean(jsDocTags.find(tag => tag.name === 'public'));
   }
 
-  public getReturnDescription(
-    symbol: ts.Symbol
-  ): SymbolDisplayPart[] | undefined {
+  public getReturnDescription(symbol: ts.Symbol): string {
     const tags = symbol.getJsDocTags();
     const returnTag = tags.find(tag => tag.name === 'returns');
-    if (!returnTag || !Array.isArray(returnTag.text)) {
-      return;
-    }
-
-    return returnTag.text;
+    return tagTextToString(returnTag);
   }
 
   private getValuesFromUnionType(type: ts.Type): string | number {
@@ -614,11 +605,13 @@ export class Parser {
         (this.shouldExtractLiteralValuesFromEnum &&
           propType.types.every(
             type =>
-              type.getFlags() &
-              (ts.TypeFlags.StringLiteral |
-                ts.TypeFlags.NumberLiteral |
-                ts.TypeFlags.EnumLiteral |
-                ts.TypeFlags.Undefined)
+              !!(
+                type.getFlags() &
+                (ts.TypeFlags.StringLiteral |
+                  ts.TypeFlags.NumberLiteral |
+                  ts.TypeFlags.EnumLiteral |
+                  ts.TypeFlags.Undefined)
+              )
           ))
       ) {
         let value = propType.types.map(type => this.getInfoFromUnionType(type));
@@ -786,7 +779,7 @@ export class Parser {
     const tagMap: StringIndexedObject<string> = {};
 
     tags.forEach(tag => {
-      const trimmedText = ts.displayPartsToString(tag.text).trim();
+      const trimmedText = tagTextToString(tag).trim();
       const currentValue = tagMap[tag.name];
       tagMap[tag.name] = currentValue
         ? currentValue + '\n' + trimmedText
@@ -878,7 +871,7 @@ export class Parser {
             if (declarations) {
               if (ts.isImportSpecifier(declarations[0])) {
                 var symbol = this.checker.getSymbolAtLocation(
-                  declarations[0].name
+                  (declarations[0] as ts.ImportSpecifier).name
                 );
                 if (!symbol) {
                   continue;
@@ -1152,10 +1145,22 @@ function getPropertyName(
   }
 }
 
+/**
+ * `tag.text` has type `ts.SymbolDisplayPart[]` in TS 4.3+ and `string` in older versions.
+ * This handles getting the text from either one (defaulting to an empty string).
+ */
+function tagTextToString(tag: ts.JSDocTagInfo | undefined): string {
+  return tag && typeof tag.text === 'string'
+    ? tag.text
+    : tag && Array.isArray(tag.text)
+    ? ts.displayPartsToString(tag.text)
+    : '';
+}
+
 function formatTag(tag: ts.JSDocTagInfo) {
   let result = '@' + tag.name;
   if (tag.text) {
-    result += ' ' + ts.displayPartsToString(tag.text);
+    result += ' ' + tagTextToString(tag);
   }
   return result;
 }

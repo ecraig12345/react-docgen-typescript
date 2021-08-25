@@ -2,6 +2,7 @@ import { assert } from 'chai';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
+import * as semver from 'semver';
 import {
   getDefaultExportForFile,
   parse,
@@ -120,10 +121,18 @@ describe('parser', () => {
   });
 
   it('should parse simple react class component with picked properties', () => {
+    const handlesPickDescription = semver.gte(ts.version, '3.1.0');
     check('ColumnWithPick', {
       Column: {
-        prop1: { type: 'string', required: false },
-        prop2: { type: 'number' },
+        prop1: {
+          type: 'string',
+          required: false,
+          description: handlesPickDescription ? 'prop1 description' : ''
+        },
+        prop2: {
+          type: 'number',
+          description: handlesPickDescription ? 'prop2 description' : ''
+        },
         propx: { type: 'number' }
       }
     });
@@ -217,6 +226,10 @@ describe('parser', () => {
   });
 
   it('should parse static sub components', () => {
+    if (semver.lt(ts.version, '3.1.0')) {
+      return;
+    }
+
     check('StatelessStaticComponents', {
       StatelessStaticComponents: {
         myProp: { type: 'string' }
@@ -532,9 +545,15 @@ describe('parser', () => {
   it('should parse react stateless component with generic intersection + union overlap props - simple', () => {
     check('SimpleGenericUnionIntersection', {
       SimpleGenericUnionIntersection: {
-        as: { type: 'unknown', description: '' },
+        as: {
+          type: semver.gte(ts.version, '3.9.0') ? 'unknown' : 'any',
+          description: ''
+        },
         foo: {
-          description: 'The foo prop should not repeat the description',
+          description: semver.gte(ts.version, '4.0.0')
+            ? 'The foo prop should not repeat the description'
+            : // known issue in older versions
+              'The foo prop should not repeat the description\nThe foo prop should not repeat the description',
           required: false,
           type: '"red" | "blue"'
         },
@@ -573,13 +592,19 @@ describe('parser', () => {
           description:
             'The space between children\nYou cannot use gap when using a "space" justify property',
           required: false,
-          type: 'string | number'
+          type: semver.gte(ts.version, '4.2.0')
+            ? 'string | number'
+            : 'ReactText' // known issue with earlier TS versions
         }
       }
     });
   });
 
   it('should parse react stateless component with generic intersection + union + omit overlap props', () => {
+    if (semver.lt(ts.version, '3.5.0')) {
+      return;
+    }
+
     check('ComplexGenericUnionIntersectionWithOmit', {
       ComplexGenericUnionIntersectionWithOmit: {
         as: {
@@ -603,7 +628,9 @@ describe('parser', () => {
           description:
             'The space between children\nYou cannot use gap when using a "space" justify property',
           required: false,
-          type: 'string | number'
+          type: semver.gte(ts.version, '4.2.0')
+            ? 'string | number'
+            : 'ReactText' // known issue with earlier TS versions
         }
       }
     });
@@ -1129,7 +1156,9 @@ describe('parser', () => {
           {
             ButtonWithOnClickComponent: {
               onClick: {
-                type: 'MouseEventHandler<HTMLButtonElement>',
+                type: semver.gte(ts.version, '4.2.0')
+                  ? 'MouseEventHandler<HTMLButtonElement>'
+                  : '(event: MouseEvent<HTMLButtonElement, MouseEvent>) => void',
                 required: false,
                 description: 'onClick event handler'
               }
@@ -1524,7 +1553,9 @@ describe('parser', () => {
               value: [
                 {
                   value: '"one"',
-                  description: 'test comment',
+                  description: semver.gte(ts.version, '3.1.0')
+                    ? 'test comment'
+                    : 'test comment ',
                   fullComment: 'test comment',
                   tags: {}
                 },

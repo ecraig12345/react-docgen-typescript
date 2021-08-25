@@ -1,12 +1,9 @@
 import { assert } from 'chai';
 import { isEqual } from 'lodash';
 import * as path from 'path';
-import {
-  ComponentDoc,
-  defaultParserOpts,
-  parse,
-  ParserOptions
-} from '../parser';
+import * as semver from 'semver';
+import * as ts from 'typescript';
+import { ComponentDoc, parse, ParserOptions } from '../parser';
 
 export interface ExpectedComponents {
   [key: string]: ExpectedComponent;
@@ -61,6 +58,8 @@ export function checkComponent(
   exactProperties: boolean = true,
   description?: string | null
 ) {
+  const shouldTrimSpaces = semver.lt(ts.version, '3.1.0');
+
   const expectedComponentNames = Object.getOwnPropertyNames(expected);
   assert.equal(
     actual.length,
@@ -91,10 +90,13 @@ export function checkComponent(
       expectedComponentDescription = description || '';
     }
 
-    if (componentDoc.description !== expectedComponentDescription) {
+    const actualDescription = shouldTrimSpaces
+      ? componentDoc.description.replace(/ (\n|$)/, '$1')
+      : componentDoc.description;
+    if (actualDescription !== expectedComponentDescription) {
       // tslint:disable-next-line:max-line-length
       errors.push(
-        `${compName} description is different - expected: '${expectedComponentDescription}', actual: '${componentDoc.description}'`
+        `${compName} description is different - expected: '${expectedComponentDescription}', actual: '${actualDescription}'`
       );
     }
 
@@ -128,10 +130,13 @@ export function checkComponent(
           expectedProp.description === undefined
             ? `${expectedPropName} description`
             : expectedProp.description;
-        if (expectedDescription !== prop.description) {
+        const actualPropDescription = shouldTrimSpaces
+          ? prop.description.replace(/ (\n|$)/, '$1')
+          : prop.description;
+        if (expectedDescription !== actualPropDescription) {
           errors.push(
             // tslint:disable-next-line:max-line-length
-            `Property '${compName}.${expectedPropName}' description is different - expected: ${expectedDescription}, actual: ${prop.description}`
+            `Property '${compName}.${expectedPropName}' description is different - expected: ${expectedDescription}, actual: ${actualPropDescription}`
           );
         }
         const expectedParentFileName = expectedProp.parent
